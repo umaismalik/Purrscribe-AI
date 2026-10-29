@@ -1,0 +1,61 @@
+kind: pipeline
+type: docker
+name: pr-merge-pipeline
+
+workspace:
+  base: /drone/src
+
+# Trigger on PRs targeting main and on pushes (merge) to main
+trigger:
+  event:
+    - pull_request
+    - push
+  branch:
+    - main
+  target:
+    - main
+
+steps:
+  - name: prepare-clone
+    image: alpine/git
+    commands:
+      # runner already checks out code into ${DRONE_WORKSPACE}; copy into repo/ as requested
+      - mkdir -p ${DRONE_WORKSPACE}/repo
+      - git clone "https://github.com/${DRONE_REPO}.git" repo
+      - cp -a ${DRONE_WORKSPACE}/. ${DRONE_WORKSPACE}/repo/
+      - ls -la ${DRONE_WORKSPACE}/repo
+
+  - name: build-image
+    image: docker:24
+    privileged: true
+    environment:
+      DOCKER_HOST: tcp://docker:2375
+      DOCKER_TLS_CERTDIR: ""
+      IMAGE_NAME: ${DRONE_REPO_NAME}
+      IMAGE_TAG: ${DRONE_COMMIT_SHA:-latest}
+    commands:
+      - cd ${DRONE_WORKSPACE}/repo
+      - docker compose up --build
+
+  - name: start-container
+    image: docker:24
+    privileged: true
+    environment:
+      DOCKER_HOST: tcp://docker:2375
+      DOCKER_TLS_CERTDIR: ""
+      IMAGE_NAME: ${DRONE_REPO_NAME}
+      IMAGE_TAG: ${DRONE_COMMIT_SHA:-latest}
+    commands:
+      - cd ${DRONE_WORKSPACE}/repo
+      - docker rm -f purrscribe_app || true
+      - docker run -d --name purrscribe_app -p 5000:5000 "${IMAGE_NAME}:${IMAGE_TAG}"
+      - docker ps --filter name=purrscribe_app
+
+services:
+  - name: docker
+    image: docker:24-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+
+volumes: 

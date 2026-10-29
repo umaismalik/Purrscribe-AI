@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - backend/.env        # primary backend env (contains PORT, JWT_SECRET, DB creds, etc.)
+      - .env                # optional frontend env (if you want merged)
+    depends_on:
+      - db
+    volumes:
+      - uploads:/app/backend/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "n3wP@ssoword"   # <--- change before use
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssqldata:/var/opt/mssql
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  mssqldata:
